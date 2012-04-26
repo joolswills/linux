@@ -95,16 +95,18 @@
 #define PCH_CLOCK_HZ		50000000
 #define PCH_MAX_SPBR		1023
 
-/* Definition for ML7213 by OKI SEMICONDUCTOR */
+/* Definition for ML7213/ML7831 by OKI SEMICONDUCTOR */
 #define PCI_VENDOR_ID_ROHM		0x10DB
 #define PCI_DEVICE_ID_ML7213_SPI	0x802c
 #define PCI_DEVICE_ID_ML7223_SPI	0x800F
+#define PCI_DEVICE_ID_ML7831_SPI	0x8816
 
 /*
  * Set the number of SPI instance max
  * Intel EG20T PCH :		1ch
  * OKI SEMICONDUCTOR ML7213 IOH :	2ch
  * OKI SEMICONDUCTOR ML7223 IOH :	1ch
+ * OKI SEMICONDUCTOR ML7831 IOH :	1ch
 */
 #define PCH_SPI_MAX_DEV			2
 
@@ -218,6 +220,7 @@ static struct pci_device_id pch_spi_pcidev_id[] = {
 	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_GE_SPI),    1, },
 	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ML7213_SPI), 2, },
 	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ML7223_SPI), 1, },
+	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ML7831_SPI), 1, },
 	{ }
 };
 
@@ -315,22 +318,23 @@ static void pch_spi_handler_sub(struct pch_spi_data *data, u32 reg_spsr_val,
 		data->tx_index = tx_index;
 		data->rx_index = rx_index;
 
-	}
+		/* if transfer complete interrupt */
+		if (reg_spsr_val & SPSR_FI_BIT) {
+			if ((tx_index == bpw_len) && (rx_index == tx_index)) {
+				/* disable interrupts */
+				pch_spi_setclr_reg(data->master, PCH_SPCR, 0,
+						   PCH_ALL);
 
-	/* if transfer complete interrupt */
-	if (reg_spsr_val & SPSR_FI_BIT) {
-		if ((tx_index == bpw_len) && (rx_index == tx_index)) {
-			/* disable interrupts */
-			pch_spi_setclr_reg(data->master, PCH_SPCR, 0, PCH_ALL);
-
-			/* transfer is completed;
-			   inform pch_spi_process_messages */
-			data->transfer_complete = true;
-			data->transfer_active = false;
-			wake_up(&data->wait);
-		} else {
-			dev_err(&data->master->dev,
-				"%s : Transfer is not completed", __func__);
+				/* transfer is completed;
+				   inform pch_spi_process_messages */
+				data->transfer_complete = true;
+				data->transfer_active = false;
+				wake_up(&data->wait);
+			} else {
+				dev_err(&data->master->dev,
+					"%s : Transfer is not completed",
+					__func__);
+			}
 		}
 	}
 }
@@ -1717,7 +1721,7 @@ static int pch_spi_resume(struct pci_dev *pdev)
 
 #endif
 
-static struct pci_driver pch_spi_pcidev = {
+static struct pci_driver pch_spi_pcidev_driver = {
 	.name = "pch_spi",
 	.id_table = pch_spi_pcidev_id,
 	.probe = pch_spi_probe,
@@ -1733,7 +1737,7 @@ static int __init pch_spi_init(void)
 	if (ret)
 		return ret;
 
-	ret = pci_register_driver(&pch_spi_pcidev);
+	ret = pci_register_driver(&pch_spi_pcidev_driver);
 	if (ret)
 		return ret;
 
@@ -1743,7 +1747,7 @@ module_init(pch_spi_init);
 
 static void __exit pch_spi_exit(void)
 {
-	pci_unregister_driver(&pch_spi_pcidev);
+	pci_unregister_driver(&pch_spi_pcidev_driver);
 	platform_driver_unregister(&pch_spi_pd_driver);
 }
 module_exit(pch_spi_exit);
