@@ -1,3 +1,5 @@
 #!/bin/sh
+VER="$1"
+[ -z "$VER" ] && VER="1"
 export CONCURRENCY_LEVEL="8"
-fakeroot make-kpkg --initrd --append_to_version joggler1 --revision `make kernelversion`joggler1 kernel_image linux_headers
+fakeroot make-kpkg --initrd --append_to_version joggler$VER --revision `make kernelversion`joggler$VER kernel_image linux_headers
